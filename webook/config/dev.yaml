@@ -1,0 +1,12 @@
+test:
+  key: value1234
+
+redis:
+  addr: "localhost:6379"
+
+db:
+  dsn: "root:root@tcp(localhost:13316)/webook"
+
+kafka:
+  addrs:
+    - "localhost:9094"
