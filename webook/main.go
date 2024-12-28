@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	_ "github.com/spf13/viper/remote"
@@ -15,7 +16,9 @@ import (
 func main() {
 	initViperV1()
 	initLogger()
+	initPrometheus()
 	app := InitWebServer()
+	// Consumer 类似于Web 或者GRPC，是一个顶级入口
 	for _, c := range app.consumers {
 		err := c.Start()
 		if err != nil {
@@ -27,6 +30,13 @@ func main() {
 		ctx.String(http.StatusOK, "hello，启动成功了！")
 	})
 	server.Run(":8080")
+}
+
+func initPrometheus() {
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(":8081", nil)
+	}()
 }
 
 func initLogger() {

@@ -16,20 +16,19 @@ func TestSyncProducer(t *testing.T) {
 	producer, err := sarama.NewSyncProducer(addrs, cfg)
 	assert.NoError(t, err)
 	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
-		Topic: "test_topic",
-		Key:   sarama.StringEncoder("oid-123"),
+		Topic: "read_article",
 		// 消息数据本体
 		// 转JSON
-		Value: sarama.StringEncoder("hello 这是一条消息 A"),
+		Value: sarama.StringEncoder(`{"aid":1,"uid":123}`),
 		// 会在生产者和消费者之间传递
-		Headers: []sarama.RecordHeader{
-			{
-				Key:   []byte("trace_id"),
-				Value: []byte("123456"),
+		/*	Headers: []sarama.RecordHeader{
+				{
+					Key:   []byte("trace_id"),
+					Value: []byte("123456"),
+				},
 			},
-		},
-		// 只作用于发送过程
-		Metadata: "这是metadata",
+			// 只作用于发送过程
+			Metadata: "这是metadata",*/
 	})
 	assert.NoError(t, err)
 }

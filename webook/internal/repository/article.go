@@ -15,6 +15,7 @@ type ArticleRepository interface {
 	Update(ctx context.Context, art domain.Article) error
 	Sync(ctx context.Context, art domain.Article) (int64, error)
 	SyncStatus(ctx context.Context, uid int64, id int64, status domain.ArticleStatus) error
+	GetByAuthor(ctx context.Context, uid int64, offset int, limit int) ([]domain.Article, error)
 	List(ctx context.Context, uid int64, offset int, limit int) ([]domain.Article, error)
 	GetById(ctx context.Context, id int64) (domain.Article, error)
 	GetPubById(ctx context.Context, id int64) (domain.Article, error)
@@ -62,6 +63,47 @@ func (c *CachedArticleRepository) GetById(ctx context.Context, id int64) (domain
 	}
 	return c.toDomain(data), nil
 
+}
+
+func (c *CachedArticleRepository) GetByAuthor(ctx context.Context, uid int64, offset int, limit int) ([]domain.Article, error) {
+	// 首先第一步，判定要不要查询缓存
+	// 事实上， limit <= 100 都可以查询缓存
+	if offset == 0 && limit == 100 {
+		//if offset == 0 && limit <= 100 {
+		res, err := c.cache.GetFirstPage(ctx, uid)
+		if err == nil {
+			return res, err
+		} else {
+			// 要考虑记录日志
+			// 缓存未命中，你是可以忽略的
+		}
+	}
+	arts, err := c.dao.GetByAuthor(ctx, uid, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	res := slice.Map[dao.Article, domain.Article](arts, func(idx int, src dao.Article) domain.Article {
+		return c.toDomain(src)
+	})
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if offset == 0 && limit == 100 {
+			// 缓存回写失败，不一定是大问题，但有可能是大问题
+			err = c.cache.SetFirstPage(ctx, uid, res)
+			if err != nil {
+				// 记录日志
+				// 我需要监控这里
+			}
+		}
+	}()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		c.preCache(ctx, res)
+	}()
+	return res, nil
 }
 
 func (c *CachedArticleRepository) List(ctx context.Context, uid int64, offset int, limit int) ([]domain.Article, error) {

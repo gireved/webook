@@ -2,8 +2,10 @@ package web
 
 import (
 	"geektime-basic-go/webook/internal/domain"
+	"geektime-basic-go/webook/internal/errs"
 	"geektime-basic-go/webook/internal/service"
 	ijwt "geektime-basic-go/webook/internal/web/jwt"
+	"geektime-basic-go/webook/pkg/ginx"
 	regexp "github.com/dlclark/regexp2"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -54,7 +56,7 @@ func (h *UserHandler) RegisterRoutes(server *gin.Engine) {
 	ug.POST("/login", h.LoginJWT)
 	ug.POST("/logout", h.LogoutJWT)
 	// POST /users/edit
-	ug.POST("/edit", h.Edit)
+	ug.POST("/edit", ginx.WrapBodyAndClaims(h.Edit))
 	// GET /users/profile
 	ug.GET("/profile", h.Profile)
 	ug.GET("/refresh_token", h.RefreshToken)
@@ -224,7 +226,10 @@ func (h *UserHandler) LoginJWT(ctx *gin.Context) {
 		}
 		ctx.String(http.StatusOK, "登录成功")
 	case service.ErrInvalidUserOrPassword:
-		ctx.String(http.StatusOK, "用户名或者密码不对")
+		ctx.JSON(http.StatusOK, Result{
+			Code: errs.UserInvalidOrPassword,
+			Msg:  "用户不存在或密码错误",
+		})
 	default:
 		ctx.String(http.StatusOK, "系统错误")
 	}
@@ -269,34 +274,18 @@ func (h *UserHandler) Login(ctx *gin.Context) {
 	}
 }
 
-func (h *UserHandler) Edit(ctx *gin.Context) {
+func (h *UserHandler) Edit(ctx *gin.Context, req UserEditReq,
+	uc ijwt.UserClaims) (ginx.Result, error) {
 	// 嵌入一段刷新过期时间的代码
-	type Req struct {
-		// 改邮箱，密码，或者能不能改手机号
-
-		Nickname string `json:"nickname"`
-		// YYYY-MM-DD
-		Birthday string `json:"birthday"`
-		AboutMe  string `json:"aboutMe"`
-	}
-	var req Req
-	if err := ctx.Bind(&req); err != nil {
-		return
-	}
 	//sess := sessions.Default(ctx)
 	//sess.Get("uid")
-	uc, ok := ctx.MustGet("user").(ijwt.UserClaims)
-	if !ok {
-		//ctx.String(http.StatusOK, "系统错误")
-		ctx.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
 	// 用户输入不对
 	birthday, err := time.Parse(time.DateOnly, req.Birthday)
 	if err != nil {
-		//ctx.String(http.StatusOK, "系统错误")
-		ctx.String(http.StatusOK, "生日格式不对")
-		return
+		return ginx.Result{
+			Code: 4,
+			Msg:  "生日格式不对",
+		}, err
 	}
 	err = h.svc.UpdateNonSensitiveInfo(ctx, domain.User{
 		Id:       uc.Uid,
@@ -305,10 +294,14 @@ func (h *UserHandler) Edit(ctx *gin.Context) {
 		AboutMe:  req.AboutMe,
 	})
 	if err != nil {
-		ctx.String(http.StatusOK, "系统异常")
-		return
+		return ginx.Result{
+			Code: 5,
+			Msg:  "系统错误",
+		}, err
 	}
-	ctx.String(http.StatusOK, "更新成功")
+	return ginx.Result{
+		Msg: "OK",
+	}, nil
 }
 
 func (h *UserHandler) Profile(ctx *gin.Context) {

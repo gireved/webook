@@ -8,10 +8,16 @@ import (
 
 type Producer interface {
 	ProducerReadEvent(ctx context.Context, evt ReadEvent) error
+	ProducerReadEventV1(ctx context.Context, v1 ReadEventV1)
 }
 
 type KafkaProducer struct {
 	producer sarama.SyncProducer
+}
+
+func (k *KafkaProducer) ProducerReadEventV1(ctx context.Context, v1 ReadEventV1) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (k *KafkaProducer) ProducerReadEvent(ctx context.Context, evt ReadEvent) error {
@@ -35,4 +41,9 @@ func NewKafkaProducer(pc sarama.SyncProducer) Producer {
 type ReadEvent struct {
 	Uid int64
 	Aid int64
+}
+
+type ReadEventV1 struct {
+	Uids []int64
+	Aids []int64
 }

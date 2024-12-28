@@ -8,5 +8,5 @@ db:
   dsn: "root:root@tcp(localhost:13316)/webook"
 
 kafka:
-  addrs:
+  addr:
     - "localhost:9094"

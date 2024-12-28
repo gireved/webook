@@ -16,6 +16,7 @@ type InteractiveRepository interface {
 	Get(ctx context.Context, biz string, id int64) (domain.Interactive, error)
 	Liked(ctx context.Context, biz string, id int64, uid int64) (bool, error)
 	Collected(ctx context.Context, biz string, id int64, uid int64) (bool, error)
+	AddRecord(ctx context.Context, aid int64, uid int64) error
 }
 
 type CachedInteractiveRepository struct {
@@ -28,6 +29,10 @@ func NewCachedInteractiveRepository(dao dao.InteractiveDAO,
 	l logger.LoggerV1,
 	cache cache.InteractiveCache) InteractiveRepository {
 	return &CachedInteractiveRepository{dao: dao, cache: cache}
+}
+
+func (c *CachedInteractiveRepository) AddRecord(ctx context.Context, aid int64, uid int64) error {
+	panic("implement me")
 }
 
 func (c *CachedInteractiveRepository) Get(ctx context.Context, biz string, id int64) (domain.Interactive, error) {

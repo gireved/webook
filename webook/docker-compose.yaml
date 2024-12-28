@@ -14,6 +14,23 @@ services:
 #      - 外部访问用 13316
       - 13316:3306
 
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    ports:
+      - 3000:3000
+
+  zipkin:
+    image: openzipkin/zipkin-slim:latest
+    ports:
+      - '9411:9411'
+
   redis:
     image: "bitnami/redis:latest"
     restart: always
@@ -53,4 +70,5 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+
 

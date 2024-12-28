@@ -1,15 +1,15 @@
 package ioc
 
 import (
-	"context"
 	"geektime-basic-go/webook/internal/web"
 	ijwt "geektime-basic-go/webook/internal/web/jwt"
 	"geektime-basic-go/webook/internal/web/middleware"
-	"geektime-basic-go/webook/pkg/ginx/middleware/ratelimit"
-	"geektime-basic-go/webook/pkg/limiter"
+	"geektime-basic-go/webook/pkg/ginx"
+	"geektime-basic-go/webook/pkg/ginx/middleware/prometheus"
 	"geektime-basic-go/webook/pkg/logger"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	prometheus2 "github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"strings"
 	"time"
@@ -34,11 +34,24 @@ func InitWebServer(mdls []gin.HandlerFunc,
 	userHdl.RegisterRoutes(server)
 	wechatHdl.RegisterRoutes(server)
 	artHdl.RegisterRoutes(server)
+	(&web.ObservabilityHandler{}).RegisterRouter(server)
 	return server
 }
 
 func InitGinMiddlewares(redisClient redis.Cmdable,
 	hdl ijwt.Handler, l logger.LoggerV1) []gin.HandlerFunc {
+	pb := &prometheus.Builder{
+		Namespace: "webook_whx",
+		Subsystem: "webook",
+		Name:      "gin_http",
+		Help:      "统计 GIN 的HTTP接口数据",
+	}
+	ginx.InitCounter(prometheus2.CounterOpts{
+		Namespace: "webook_whx",
+		Subsystem: "webook",
+		Name:      "biz_code",
+		Help:      "统计业务错误码",
+	})
 	return []gin.HandlerFunc{
 		cors.New(cors.Config{
 			//AllowAllOrigins: true,
@@ -62,10 +75,12 @@ func InitGinMiddlewares(redisClient redis.Cmdable,
 		func(ctx *gin.Context) {
 			println("这是我的 Middleware")
 		},
-		ratelimit.NewBuilder(limiter.NewRedisSlidingWindowLimiter(redisClient, time.Second, 1000)).Build(),
-		middleware.NewLogMiddlewareBuilder(func(ctx context.Context, al middleware.AccessLog) {
-			l.Debug("", logger.Field{Key: "req", Val: al})
-		}).AllowReqBody().AllowRespBody().Build(),
+		pb.BuildResponseTime(),
+		pb.BuildActiveRequest(),
+		//ratelimit.NewBuilder(limiter.NewRedisSlidingWindowLimiter(redisClient, time.Second, 1000)).Build(),
+		//middleware.NewLogMiddlewareBuilder(func(ctx context.Context, al middleware.AccessLog) {
+		//	l.Debug("", logger.Field{Key: "req", Val: al})
+		//}).AllowReqBody().AllowRespBody().Build(),
 		middleware.NewLoginJWTMiddlewareBuilder(hdl).CheckLogin(),
 	}
 }

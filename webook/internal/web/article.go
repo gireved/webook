@@ -1,9 +1,11 @@
 package web
 
 import (
+	"fmt"
 	"geektime-basic-go/webook/internal/domain"
 	"geektime-basic-go/webook/internal/service"
 	"geektime-basic-go/webook/internal/web/jwt"
+	"geektime-basic-go/webook/pkg/ginx"
 	"geektime-basic-go/webook/pkg/logger"
 	"github.com/ecodeclub/ekit/slice"
 	"github.com/gin-gonic/gin"
@@ -33,29 +35,22 @@ func (h *ArticleHandler) RegisterRoutes(server *gin.Engine) {
 	g := server.Group("/articles")
 
 	//g.PUT("/", h.Edit)
-	g.POST("/edit", h.Edit)
-	g.POST("/publish", h.Publish)
-	g.POST("/withdraw", h.Withdraw)
+	g.POST("/edit", ginx.WrapBodyAndClaims(h.Edit))
+	g.POST("/publish", ginx.WrapBodyAndClaims(h.Publish))
+	g.POST("/withdraw", ginx.WrapBodyAndClaims(h.Withdraw))
 	// 创作者的查询接口
 	g.POST("/list", h.List)
 	g.POST("/detail", h.Detail)
 
 	pub := g.Group("/pub")
 	pub.GET("/:id", h.PubDetail)
-	pub.POST("/like", h.Like)
+	// 传入一个参数，true 就是点赞, false 就是不点赞
+	pub.POST("/like", ginx.WrapBodyAndClaims(h.Like))
+	pub.POST("/collect", ginx.WrapBodyAndClaims(h.Collect))
 }
 
-func (h *ArticleHandler) Like(c *gin.Context) {
-	type Req struct {
-		Id int64 `json:"id"`
-		// true 是点赞，false 是不点赞
-		Like bool `json:"like"`
-	}
-	var req Req
-	if err := c.Bind(&req); err != nil {
-		return
-	}
-	uc := c.MustGet("user").(jwt.UserClaims)
+func (h *ArticleHandler) Like(c *gin.Context,
+	req ArticleLikeReq, uc jwt.UserClaims) (ginx.Result, error) {
 	var err error
 	if req.Like {
 		// 点赞
@@ -65,32 +60,31 @@ func (h *ArticleHandler) Like(c *gin.Context) {
 		err = h.intrSvc.CancelLike(c, h.biz, req.Id, uc.Uid)
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, Result{
+		return ginx.Result{
 			Code: 5, Msg: "系统错误",
-		})
-		h.l.Error("点赞/取消点赞失败",
-			logger.Error(err),
-			logger.Int64("uid", uc.Uid),
-			logger.Int64("aid", req.Id))
-		return
+		}, err
 	}
-	c.JSON(http.StatusOK, Result{
+	return ginx.Result{
 		Msg: "OK",
-	})
+	}, nil
+}
+
+func (h *ArticleHandler) Collect(ctx *gin.Context,
+	req ArticleCollectReq, uc jwt.UserClaims) (ginx.Result, error) {
+	err := h.intrSvc.Collect(ctx, h.biz, req.Id, req.Cid, uc.Uid)
+	if err != nil {
+		return ginx.Result{
+			Code: 5, Msg: "系统错误",
+		}, err
+	}
+	return ginx.Result{
+		Msg: "OK",
+	}, nil
 }
 
 // Edit 接收 Article 输入，返回一个 ID，文章的 ID
-func (h *ArticleHandler) Edit(ctx *gin.Context) {
-	type Req struct {
-		Id      int64
-		Title   string `json:"title"`
-		Content string `json:"content"`
-	}
-	var req Req
-	if err := ctx.Bind(&req); err != nil {
-		return
-	}
-	uc := ctx.MustGet("user").(jwt.UserClaims)
+func (h *ArticleHandler) Edit(ctx *gin.Context,
+	req ArticleEditReq, uc jwt.UserClaims) (ginx.Result, error) {
 	id, err := h.svc.Save(ctx, domain.Article{
 		Id:      req.Id,
 		Title:   req.Title,
@@ -100,29 +94,18 @@ func (h *ArticleHandler) Edit(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		ctx.JSON(http.StatusOK, Result{
+		return ginx.Result{
 			Msg: "系统错误",
-		})
-		h.l.Error("保存文章数据失败",
-			logger.Int64("uid", uc.Uid),
-			logger.Error(err))
-		return
+		}, err
 	}
-	ctx.JSON(http.StatusOK, Result{
+	return ginx.Result{
 		Data: id,
-	})
+	}, nil
 }
 
-func (h *ArticleHandler) Publish(ctx *gin.Context) {
-	type Req struct {
-		Id      int64
-		Title   string `json:"title"`
-		Content string `json:"content"`
-	}
-	var req Req
-	if err := ctx.Bind(&req); err != nil {
-		return
-	}
+func (h *ArticleHandler) Publish(ctx *gin.Context,
+	req PublishReq,
+	uc jwt.UserClaims) (ginx.Result, error) {
 	//val, ok := ctx.Get("user")
 	//if !ok {
 	//	ctx.JSON(http.StatusOK, Result{
@@ -131,7 +114,6 @@ func (h *ArticleHandler) Publish(ctx *gin.Context) {
 	//	})
 	//	return
 	//}
-	uc := ctx.MustGet("user").(jwt.UserClaims)
 	id, err := h.svc.Publish(ctx, domain.Article{
 		Id:      req.Id,
 		Title:   req.Title,
@@ -141,55 +123,40 @@ func (h *ArticleHandler) Publish(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		ctx.JSON(http.StatusOK, Result{
+		return ginx.Result{
 			Msg:  "系统错误",
 			Code: 5,
-		})
-		h.l.Error("发表文章失败",
-			logger.Int64("uid", uc.Uid),
-			logger.Error(err))
-		return
+		}, fmt.Errorf("发表文章失败 aid %d, uid %d %w", uc.Uid, req.Id, err)
 	}
-	ctx.JSON(http.StatusOK, Result{
+	return ginx.Result{
 		Data: id,
-	})
+	}, nil
 }
 
-func (h *ArticleHandler) Withdraw(ctx *gin.Context) {
-	type Req struct {
-		Id int64
-	}
-	var req Req
-	if err := ctx.Bind(&req); err != nil {
-		return
-	}
-	uc := ctx.MustGet("user").(jwt.UserClaims)
+func (h *ArticleHandler) Withdraw(ctx *gin.Context,
+	req ArticleWithdrawReq, uc jwt.UserClaims) (ginx.Result, error) {
 	err := h.svc.Withdraw(ctx, uc.Uid, req.Id)
 	if err != nil {
-		ctx.JSON(http.StatusOK, Result{
+		return ginx.Result{
 			Msg:  "系统错误",
 			Code: 5,
-		})
-		h.l.Error("撤回文章失败",
-			logger.Int64("uid", uc.Uid),
-			logger.Int64("aid", req.Id),
-			logger.Error(err))
-		return
+		}, err
 	}
-	ctx.JSON(http.StatusOK, Result{
+	return ginx.Result{
 		Msg: "OK",
-	})
+	}, nil
 }
 
 func (h *ArticleHandler) List(ctx *gin.Context) {
-	var page ListReq
+	var page Page
 	if err := ctx.Bind(&page); err != nil {
 		return
 	}
+	// 我要不要检测一下？
 	uc := ctx.MustGet("user").(jwt.UserClaims)
-	res, err := h.svc.List(ctx, uc.Uid, page.Offset, page.Limit)
+	arts, err := h.svc.GetByAuthor(ctx, uc.Uid, page.Offset, page.Limit)
 	if err != nil {
-		ctx.JSON(http.StatusOK, Result{
+		ctx.JSON(http.StatusOK, ginx.Result{
 			Code: 5,
 			Msg:  "系统错误",
 		})
@@ -200,9 +167,8 @@ func (h *ArticleHandler) List(ctx *gin.Context) {
 			logger.Int64("uid", uc.Uid))
 		return
 	}
-	// 在列表页不显示全文，只显示摘要
-	ctx.JSON(http.StatusOK, Result{
-		Data: slice.Map[domain.Article, ArticleVo](res, func(idx int, src domain.Article) ArticleVo {
+	ctx.JSON(http.StatusOK, ginx.Result{
+		Data: slice.Map[domain.Article, ArticleVo](arts, func(idx int, src domain.Article) ArticleVo {
 			return ArticleVo{
 				Id:       src.Id,
 				Title:    src.Title,

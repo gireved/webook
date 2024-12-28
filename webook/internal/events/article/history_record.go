@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-type InteractiveReadEventConsumer struct {
+type HistoryRecordEventConsumer struct {
 	client sarama.Client
 	repo   repository.InteractiveRepository
 	l      logger.LoggerV1
 }
 
-func NewInteractiveReadEventConsumer(client sarama.Client,
-	l logger.LoggerV1, repo repository.InteractiveRepository) *InteractiveReadEventConsumer {
-	return &InteractiveReadEventConsumer{
+func NewHistoryRecordEventConsumer(client sarama.Client,
+	l logger.LoggerV1, repo repository.InteractiveRepository) *HistoryRecordEventConsumer {
+	return &HistoryRecordEventConsumer{
 		client: client,
 		repo:   repo,
 		l:      l,
 	}
 }
 
-func (i *InteractiveReadEventConsumer) Start() error {
+func (i *HistoryRecordEventConsumer) Start() error {
 	cg, err := sarama.NewConsumerGroupFromClient("interactive", i.client)
 	if err != nil {
 		return err
@@ -41,8 +41,8 @@ func (i *InteractiveReadEventConsumer) Start() error {
 }
 
 // Consume 这个不是幂等的
-func (i *InteractiveReadEventConsumer) Consume(msg *sarama.ConsumerMessage, t ReadEvent) error {
+func (i *HistoryRecordEventConsumer) Consume(msg *sarama.ConsumerMessage, t ReadEvent) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	return i.repo.IncrReadCnt(ctx, "article", t.Aid)
+	return i.repo.AddRecord(ctx, t.Aid, t.Uid)
 }
